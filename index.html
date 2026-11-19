@@ -94,6 +94,9 @@
       border-radius: 999px;
     }
     .example-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .mode-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
+    .mode-btn { background: #fff; border: 1px solid var(--line); color: var(--ink); font-weight: 500; font-size: 14px; padding: 7px 14px; border-radius: 999px; }
+    .mode-btn.selected { background: var(--accent); border-color: var(--accent); color: #fff; }
     .count { margin-left: auto; color: var(--muted); font-size: 13px; }
     #output {
       white-space: pre-wrap;
@@ -159,6 +162,12 @@
             <button class="ghost" id="clearBtn">Clear</button>
             <span class="count" id="inCount">0 words</span>
           </div>
+          <div class="mode-row">
+            <span class="muted-note">How different?</span>
+            <button class="mode-btn selected" data-mode="similar">Keep it similar</button>
+            <button class="mode-btn" data-mode="balanced">Balanced</button>
+            <button class="mode-btn" data-mode="different">Entirely different</button>
+          </div>
           <div class="row" style="margin-top:14px">
             <span class="muted-note">Try an example:</span>
             <button class="example-btn" data-ex="please can you write something about dogs">About dogs</button>
@@ -208,6 +217,10 @@
             <h3>The clarity score</h3>
             <p>Eight checks, each worth a share of 100: a role, one clear task, context, output format, length, audience, tone, and a constraint or example. Before and after are scored the same way, so you can see the gain from the rewrite itself.</p>
           </div>
+          <div class="card">
+            <h3>Make it yours</h3>
+            <p>When several people grade with the same prompt, the results come out alike. The three modes change that: Keep it similar tightens your prompt as written, Balanced swaps one thing for a different angle, and Entirely different rebuilds it with a new role, format, tone, audience and a twist. Each click of Entirely different gives a new combination, so the same starting prompt produces a different rewrite every time.</p>
+          </div>
         </div>
       </section>
     </div>
@@ -248,12 +261,23 @@
     { key: 'role', label: 'Role', re: /\b(as an?|act as|you are an?)\b/i, why: 'Tell the model who to be, e.g. expert copywriter, friendly teacher.' },
     { key: 'task', label: 'Clear task', re: /\b(write|create|make|explain|list|summarise|summarize|draft|plan|compare|translate|review|generate)\b/i, why: 'One clear verb for the job, e.g. write, explain, compare.' },
     { key: 'context', label: 'Context', test: function (t) { return t.split(/[.!?]+/).filter(function (s) { return s.trim().length > 3; }).length >= 2; }, why: 'A sentence of background so the answer fits your situation.' },
-    { key: 'format', label: 'Output format', re: /\b(blog post|article|essay|email|list|table|summary|tweet|thread|story|poem|code|script|outline|bullet points?|letter|speech|caption)\b/i, why: 'Say the shape of the answer, e.g. email, bullet list, table.' },
+    { key: 'format', label: 'Output format', re: /\b(blog post|article|essay|email|list|table|summary|tweet|thread|story|poem|code|script|outline|bullet points?|letter|speech|caption|dialogue|guide|questions and answers)\b/i, why: 'Say the shape of the answer, e.g. email, bullet list, table.' },
     { key: 'length', label: 'Length', re: /\b\d+\s*(words?|sentences?|paragraphs?|lines?|pages?|characters?)\b/i, why: 'A length stops it running long or coming back too short.' },
-    { key: 'audience', label: 'Audience', re: /\bfor (beginners?|kids?|children|students?|developers?|experts?|managers?|customers?|teens?|adults?|non-experts?|a general audience)\b/i, why: 'Who it is for changes the words it should use.' },
-    { key: 'tone', label: 'Tone', re: /\b(formal|casual|friendly|professional|funny|humorous|serious|simple|warm|persuasive|concise)\b/i, why: 'A tone keeps the voice consistent, e.g. friendly and simple.' },
+    { key: 'audience', label: 'Audience', re: /\bfor (beginners?|kids?|children|students?|developers?|experts?|managers?|customers?|teens?|teenagers?|adults?|non-experts?|professionals|busy professionals|curious kids|a general audience)\b/i, why: 'Who it is for changes the words it should use.' },
+    { key: 'tone', label: 'Tone', re: /\b(formal|casual|friendly|professional|funny|humorous|serious|simple|warm|persuasive|concise|playful|bold|dramatic)\b/i, why: 'A tone keeps the voice consistent, e.g. friendly and simple.' },
     { key: 'constraint', label: 'Constraint or example', re: /\b(don't|do not|avoid|must|only|exactly|no more than|at most|include|without|example|e\.g\.|for instance)\b/i, why: 'A limit or an example shows what good looks like.' }
   ];
+
+  var ALT_ROLES = ['a curious journalist', 'a skeptical editor', 'a storyteller', 'a teacher explaining to a beginner', 'a friendly coach', 'a scientist', 'a poet', 'a comedian'];
+  var ALT_FORMATS = ['a short story', 'a dialogue', 'a bullet list', 'a table', 'a letter', 'a step-by-step guide', 'a set of questions and answers', 'a social media thread'];
+  var ALT_TONES = ['playful', 'formal', 'warm', 'bold', 'simple', 'dramatic'];
+  var ALT_ANGLES = ['argue the opposite view', 'start with a surprising fact', 'tell it through a real-life example', 'explain it as if to a 10-year-old', 'write it as a conversation between two people', 'focus on what most people get wrong', 'use an analogy from everyday life', 'end with a question for the reader'];
+  var ALT_AUDIENCES = ['beginners', 'teenagers', 'busy professionals', 'curious kids', 'experts', 'a general audience'];
+  var mode = 'similar';
+  function pick(arr, exclude) {
+    var pool = arr.filter(function (x) { return !exclude || x.toLowerCase() !== String(exclude).toLowerCase(); });
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
 
   function wordCount(t) {
     var w = t.trim().split(/\s+/).filter(Boolean);
@@ -280,7 +304,7 @@
     return m ? m[0] : null;
   }
 
-  function rewrite(raw) {
+  function rewrite(raw, mode) {
     var changed = [];
     var t = raw.replace(/\s+/g, ' ').trim();
     if (!t) return null;
@@ -315,12 +339,14 @@
     var task = sentences[0] || t;
     var context = sentences.slice(1).join(' ');
 
-    if (!role) changed.push('Added a ROLE line with a placeholder for you to fill in.');
-    if (!format && !length) changed.push('Added OUTPUT and AUDIENCE lines with placeholders.');
-    else if (!format) changed.push('Added an OUTPUT line with a format placeholder.');
-    else if (!length) changed.push('Added a length placeholder to the OUTPUT line.');
-    if (!audience) changed.push('Flagged the missing audience.');
-    if (!tone) changed.push('Flagged the missing tone.');
+    if (mode !== 'different') {
+      if (!role) changed.push('Added a ROLE line with a placeholder for you to fill in.');
+      if (!format && !length) changed.push('Added OUTPUT and AUDIENCE lines with placeholders.');
+      else if (!format) changed.push('Added an OUTPUT line with a format placeholder.');
+      else if (!length) changed.push('Added a length placeholder to the OUTPUT line.');
+      if (!audience) changed.push('Flagged the missing audience.');
+      if (!tone) changed.push('Flagged the missing tone.');
+    }
     if (context) changed.push('Split the extra detail into CONTEXT so the task stays clear.');
 
     var roleLine = role ? cap(role.replace(/\s+$/, '')) + '.' : '[role, e.g. expert copywriter]';
@@ -328,6 +354,21 @@
     var lengthPart = length ? length : '[length, e.g. 500 words]';
     var audiencePart = audience ? audience : '[who is this for?]';
     var tonePart = tone ? tone : '[tone, e.g. friendly and simple]';
+    var angleLine = null;
+
+    if (mode === 'balanced') {
+      if (format) { formatPart = pick(ALT_FORMATS, format); changed.push('Balanced mode: swapped the format for "' + formatPart + '" so the result reads differently.'); }
+      else if (tone) { tonePart = pick(ALT_TONES, tone); changed.push('Balanced mode: swapped the tone for "' + tonePart + '" so the result reads differently.'); }
+      else if (audience) { audiencePart = 'for ' + pick(ALT_AUDIENCES, audience.replace(/^for\s+/i, '')); changed.push('Balanced mode: swapped the audience for "' + audiencePart + '" so the result reads differently.'); }
+      else { angleLine = pick(ALT_ANGLES); changed.push('Balanced mode: added an angle, "' + angleLine + '".'); }
+    } else if (mode === 'different') {
+      roleLine = 'Act as ' + pick(ALT_ROLES, role || '') + '.';
+      formatPart = pick(ALT_FORMATS, format || '');
+      tonePart = pick(ALT_TONES, tone || '');
+      audiencePart = 'for ' + pick(ALT_AUDIENCES, audience ? audience.replace(/^for\s+/i, '') : '');
+      angleLine = pick(ALT_ANGLES);
+      changed.push('Entirely different mode: new role, new format, new tone, new audience, plus a fresh angle. Run it again for another combination.');
+    }
 
     var lines = [];
     lines.push('ROLE: ' + roleLine);
@@ -336,6 +377,7 @@
     lines.push('OUTPUT: ' + formatPart + ', ' + lengthPart + '.');
     lines.push('AUDIENCE: ' + audiencePart + '.');
     lines.push('TONE: ' + tonePart + '.');
+    if (angleLine) lines.push('ANGLE: ' + cap(angleLine) + '.');
 
     var after = score(lines.join(' '));
     var missing = CHECKS.filter(function (c) { return !after.found[c.key]; });
@@ -412,7 +454,7 @@
       output.classList.add('empty');
       return;
     }
-    render(rewrite(raw));
+    render(rewrite(raw, mode));
   }
 
   rewriteBtn.addEventListener('click', run);
@@ -443,6 +485,14 @@
       document.body.removeChild(ta);
       done();
     }
+  });
+  document.querySelectorAll('.mode-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('.mode-btn').forEach(function (b) { b.classList.remove('selected'); });
+      btn.classList.add('selected');
+      mode = btn.getAttribute('data-mode');
+      if (input.value.trim()) run();
+    });
   });
   document.querySelectorAll('.example-btn').forEach(function (btn) {
     btn.addEventListener('click', function () {

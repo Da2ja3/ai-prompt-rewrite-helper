@@ -8,6 +8,14 @@ Open the page, paste a prompt as you would normally write it, and hit **Rewrite 
 
 There are three examples to try: a prompt about dogs, a space story for a kid, and a time-off email to a boss.
 
+## Variation modes
+
+When several people use the same prompt, for example when grading AI output, the results come out alike. The three modes fix that:
+
+- **Keep it similar** — tightens your prompt as written.
+- **Balanced** — swaps one thing, the format, tone or audience, for a different angle.
+- **Entirely different** — rebuilds the prompt with a new role, format, tone, audience and a twist. Every click gives a new combination, so the same starting prompt produces a different rewrite each time.
+
 ## How it works
 
 No API key, no sign-up, no server. A set of plain rules does the rewrite in your browser:
